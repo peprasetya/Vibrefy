@@ -1,0 +1,9 @@
+.aider*
+.DS_Store
+vibecache/
+gVideo/
+syncweb
+CLAUDE.md
+QWEN.md
+AGENTS.md
+.claude/

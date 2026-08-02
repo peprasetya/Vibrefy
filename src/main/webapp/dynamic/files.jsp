@@ -99,6 +99,27 @@ for (int i=0;i<ni;)
 
 if (videos.size()>1)
 {
+  // The same media as the section above, re-ordered newest first - a re-sorted view of
+  // this folder, like Random Suggestions below. Sorted on a copy so the shuffle there
+  // cannot depend on the order this leaves behind. Items whose source reports no
+  // timestamp carry 0 and land at the end.
+  List<FileItem> recent=new ArrayList<>(videos);
+  recent.sort(Comparator.comparingLong(FileItem::getModified).reversed());
+  int rcount=Math.min(recent.size(),20);
+%><div class="groupShow"><div>Recent Update</div><ul>
+<%
+  for (int k = 0; k < rcount; k++)
+  {
+    FileItem file = recent.get(k);
+%>  <li data-url="<%=Escape.html(file.getPath())%>" data-type="<%=file.getType()%>" <%if (file.getTimeProgress()>0)out.print("data-time=\""+file.getTimeProgress()+"\"");%> class="video" tabindex="0">
+      <img src="/<%=Escape.html(bean.CMDThumbMP4+"/"+file.getPath())%>" loading="lazy" title="<%=Escape.html(file.getName())%>">
+      <span><%=Escape.html(file.getName())%></span>
+    </li>
+<%
+  }
+%>
+</ul></div>
+<%
   Collections.shuffle(videos);
   int count = Math.min(videos.size(), 20);
 %><div class="groupShow"><div>Random Suggestions</div><ul>

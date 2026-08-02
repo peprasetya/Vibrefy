@@ -17,13 +17,20 @@ public class FileItem
   private short type=0;
   private int timeProgress=0;
   private long sortTime=0;
-  
+  // When the underlying file was last changed. Distinct from sortTime, which is when
+  // the user last watched it - a file can be recently added and never played, or long
+  // untouched and watched this morning. Set after construction because only the file
+  // listings know it; 0 means the source could not tell us.
+  private long modified=0;
+
   public String getName() {return name;}
   public String getTarget() {return target;}
   public String getPath() {return path;}
   public short getType() {return type;}
   public int getTimeProgress() {return timeProgress;}
   public long getSortTime() {return sortTime;}
+  public long getModified() {return modified;}
+  public void setModified(long newValue) {modified=newValue;}
 
 
   public FileItem(String name,String target,String path,short type)

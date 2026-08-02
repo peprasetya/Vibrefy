@@ -98,11 +98,14 @@ public class BrowseBean extends BeanObject implements Comparator<Object>
                 String lookupPath = CMDBrowse+"/"+mapPath;
                 //System.out.println("Checking: "+lookupPath);
                 JSONObject progressItem = progressMap.get(lookupPath);
+                FileItem entry;
                 if (progressItem!=null)
                 {
                   //System.out.println("Found Progress on "+mapPath);
-                  items.add(new FileItem(aFile.getName(),aFile.getName(),mapPath,FileItem.TYPEFILE,progressItem.optInt(SessionTracker.DataProgressTime),progressItem.optLong(SessionTracker.DataProgressUpdate)));
-                } else items.add(new FileItem(aFile.getName(),aFile.getName(),mapPath,FileItem.TYPEFILE));
+                  entry=new FileItem(aFile.getName(),aFile.getName(),mapPath,FileItem.TYPEFILE,progressItem.optInt(SessionTracker.DataProgressTime),progressItem.optLong(SessionTracker.DataProgressUpdate));
+                } else entry=new FileItem(aFile.getName(),aFile.getName(),mapPath,FileItem.TYPEFILE);
+                entry.setModified(aFile.lastModified());
+                items.add(entry);
               }
             }
             fileItem=items.toArray(new FileItem[0]);
@@ -387,10 +390,13 @@ public class BrowseBean extends BeanObject implements Comparator<Object>
         }
         if (!isMedia(name))continue;
         JSONObject progressItem=progressMap.get(CMDBrowse+"/"+mapPath);
+        FileItem entry;
         if (progressItem!=null)
-          items.add(new FileItem(name,name,mapPath,FileItem.TYPEFILE,
-              progressItem.optInt(SessionTracker.DataProgressTime),progressItem.optLong(SessionTracker.DataProgressUpdate)));
-        else items.add(new FileItem(name,name,mapPath,FileItem.TYPEFILE));
+          entry=new FileItem(name,name,mapPath,FileItem.TYPEFILE,
+              progressItem.optInt(SessionTracker.DataProgressTime),progressItem.optLong(SessionTracker.DataProgressUpdate));
+        else entry=new FileItem(name,name,mapPath,FileItem.TYPEFILE);
+        entry.setModified(child.getModified());
+        items.add(entry);
       }
       fileItem=items.toArray(new FileItem[0]);
     } catch (IOException e)

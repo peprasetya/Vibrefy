@@ -25,6 +25,15 @@ public class HttpTool
 {
   private static final Duration CONNECT_TIMEOUT=Duration.ofSeconds(15);
   private static final Duration REQUEST_TIMEOUT=Duration.ofSeconds(60);
+  /**
+   * A proxied media chunk takes as long as the player needs it, not as long as the
+   * network needs it: a paused or fully buffered player stops reading, our write to it
+   * blocks, and the exchange sits idle for minutes. The request timeout in java.net.http
+   * covers the whole exchange including body delivery, so REQUEST_TIMEOUT cancelled
+   * those mid-body and surfaced as "request timed out" / RST_STREAM. Media gets a far
+   * larger bound that only catches a genuinely hung provider.
+   */
+  private static final Duration STREAM_TIMEOUT=Duration.ofMinutes(15);
   private static final int MAX_REDIRECT=3;
 
   private static final ThreadLocal<Integer> lastStatus=ThreadLocal.withInitial(() -> 0);
@@ -57,7 +66,15 @@ public class HttpTool
         worker.setContextClassLoader(null);
         return worker;
       });
+      // HTTP/1.1 is deliberate. Over HTTP/2 every request to a provider shares one TCP
+      // connection, and a Drive media download (alt=media) shares it with the metadata
+      // calls - same host. While a proxied chunk is blocked writing to a stalled player
+      // we stop reading its body, the connection-level flow-control window fills, and
+      // every other stream on that connection starves: the small metadata GETs then hit
+      // REQUEST_TIMEOUT and playback fails with "request timed out". One connection per
+      // exchange confines a stalled download to itself.
       return HttpClient.newBuilder()
+          .version(HttpClient.Version.HTTP_1_1)
           .connectTimeout(CONNECT_TIMEOUT)
           .followRedirects(HttpClient.Redirect.NEVER)
           .executor(executor)
@@ -189,7 +206,12 @@ public class HttpTool
 
   private static HttpRequest.Builder build(String url,String[] headers) throws IOException
   {
-    HttpRequest.Builder builder=HttpRequest.newBuilder(toUri(url)).timeout(REQUEST_TIMEOUT);
+    return build(url,headers,REQUEST_TIMEOUT);
+  }
+
+  private static HttpRequest.Builder build(String url,String[] headers,Duration timeout) throws IOException
+  {
+    HttpRequest.Builder builder=HttpRequest.newBuilder(toUri(url)).timeout(timeout);
     if (headers!=null)for (int i=0;i+1<headers.length;i+=2)builder.header(headers[i],headers[i+1]);
     return builder;
   }
@@ -309,7 +331,7 @@ public class HttpTool
       {
         try
         {
-          HttpRequest.Builder builder=build(target,active).GET()
+          HttpRequest.Builder builder=build(target,active,STREAM_TIMEOUT).GET()
               .header("Range","bytes="+start+"-"+(start+want-1));
           response=client.send(builder.build(),HttpResponse.BodyHandlers.ofInputStream());
         } catch (InterruptedException e)

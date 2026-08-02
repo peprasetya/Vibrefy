@@ -149,8 +149,11 @@ public class AuthOpenIDBean extends BeanObject
         session.setAttribute(OpenIDProvider,provcall);
         referrer=request.getHeader(HEADERREFERER);
         session.setAttribute(OpenIDReferrer,referrer);
-        int idx=referrer.indexOf('/',9);
-        redirect=openid.getAuthorizationEndpoint(((referrer==null||referrer.length()==0)?request.getRequestURL().toString():referrer.substring(0,idx+1))+COMMAND,state);
+        // Built from the public base, not sliced out of the Referer: that header is
+        // absent on a direct hit, a noreferrer popup, or a privacy-stripping browser,
+        // and slicing a null threw. This is also the exact URI CloudAuthBean registers,
+        // so both flows send the redirect_uri the provider has on file.
+        redirect=openid.getAuthorizationEndpoint(publicBase()+COMMAND,state);
         return;
       } else
       {

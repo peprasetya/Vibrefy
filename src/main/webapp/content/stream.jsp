@@ -54,7 +54,10 @@ private boolean isClientAbort(Throwable t)
     String name=t.getClass().getName();
     String msg=t.getMessage();
     if (name.contains("EofException"))return true;
-    if (msg!=null && (msg.contains("Connection reset")||msg.contains("Broken pipe")||msg.contains("connection was aborted")))return true;
+    // A player that has buffered ahead simply stops reading, so the write blocks until
+    // the container's write-idle timeout fires. That is the player pacing us, not a
+    // fault, and it arrives as an idle-timeout IOException rather than a reset.
+    if (msg!=null && (msg.contains("Connection reset")||msg.contains("Broken pipe")||msg.contains("connection was aborted")||msg.contains("Idle timeout expired")))return true;
     t=t.getCause();
   }
   return false;

@@ -32,6 +32,9 @@ public class Command
     cmd=SetupBean.CMDSetup;commands.put(cmd,new Command(cmd,SetupBean.class,0,true,true));
     cmd=CloudBean.CMDCloud;commands.put(cmd,new Command(cmd,CloudBean.class,1,true,true));
     cmd=CloudAuthBean.COMMAND;commands.put(cmd,new Command(cmd,CloudAuthBean.class,1,true,true));
+    // Access type 0: the device being paired has no login yet. PairBean checks for an
+    // identity itself on every order that needs one.
+    cmd=PairBean.CMDPair;commands.put(cmd,new Command(cmd,PairBean.class,0,true,true));
   }
 
   public static Command getCommand(String name){return commands.getOrDefault(name,commands.get(BeanObject.CMDWelcome));}

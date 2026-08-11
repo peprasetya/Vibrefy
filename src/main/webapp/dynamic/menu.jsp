@@ -7,6 +7,7 @@
   <li page="<%=BeanObject.CMDHome%>" tabindex="0"><span>🏠 Home</span></li>
   <li page="<%=BrowseBean.CMDBrowse%>" tabindex="0"><span>🗄️ Browse</span></li>
   <li page="<%=CloudBean.CMDCloud%>" tabindex="0"><span>☁️ Cloud</span></li>
+  <li page="<%=PairBean.CMDPair%>" tabindex="0"><span>📱 Devices</span></li>
 <%
 if (bean.isAdmin())
 {

@@ -1,4 +1,4 @@
-<%@page import="id.prasetya.vibrefy.beans.PairBean,id.prasetya.vibrefy.tools.Escape" pageEncoding="UTF-8" %><jsp:useBean id="bean" scope="request" class="id.prasetya.vibrefy.beans.PairBean" /><?xml version="1.0" encoding="UTF-8" ?>
+<%@page import="id.prasetya.vibrefy.beans.BeanObject,id.prasetya.vibrefy.beans.PairBean,id.prasetya.vibrefy.tools.Escape" pageEncoding="UTF-8" %><jsp:useBean id="bean" scope="request" class="id.prasetya.vibrefy.beans.PairBean" /><?xml version="1.0" encoding="UTF-8" ?>
 <ajax>
 <%
 String mode=bean.getMode();
@@ -20,6 +20,15 @@ if (PairBean.MODEPoll.equals(mode))
   }
 } else
 {
+  // This command is reachable signed out by design, so Portal never rewrites it to
+  // welcome the way it does every other page. That means a session which expired while
+  // the menu was on screen would leave the menu sitting there - clear it here instead.
+  boolean signedOut=(bean.getAccount()==null);
+  if (signedOut)
+  {
+%><replacehtml id="menu"></replacehtml>
+<%
+  }
 %>
 <replacehtml id="panel">
 <style>
@@ -70,6 +79,7 @@ margin-top:36px;
 <div id="pair-code"><%=Escape.html(bean.getDisplayCode())%></div>
 <p>On a device where you are already signed in, open <b>&#128241; Devices</b> and enter this code.</p>
 <div id="pair-state">Waiting for approval&hellip; <%=bean.getRemaining()%>s</div>
+<p class="sep"><button onclick="makeRequest('<%=BeanObject.CMDWelcome%>','',true)">&#8617;&#65039; Back to sign in</button></p>
 <%
   } else if (PairBean.MODEOffer.equals(mode))
   {
@@ -118,6 +128,7 @@ margin-top:36px;
  <p><button onclick="claimCode(event)">&#128274; Sign in</button></p>
 </form>
 </div>
+<p class="sep"><button onclick="makeRequest('<%=BeanObject.CMDWelcome%>','',true)">&#8617;&#65039; Back to sign in</button></p>
 <%
   }
 %>
@@ -125,6 +136,17 @@ margin-top:36px;
 </replacehtml>
 <script id="pageScript">
 clearTimer();
+<%
+  if (signedOut)
+  {
+%>
+// Same reason the menu is cleared above: the player is a sibling of the panel and would
+// otherwise keep playing over a page that is telling the user they are signed out.
+if (video && video.src)video.removeAttribute('src');
+setFullWindow(false);
+<%
+  }
+%>
 
 function pairCodeValue()
 {
@@ -184,6 +206,12 @@ intervalHandler.push(setInterval(function()
 %>
 </script>
 <%
+  // initMenu hides the menu button when the list it finds is empty, so an emptied menu
+  // has to be re-initialised the same way welcome.jsp does it.
+  if (signedOut)
+  {
+%><command>initMenu</command><%
+  }
 }
 %>
 </ajax>

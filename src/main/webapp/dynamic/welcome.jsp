@@ -56,6 +56,12 @@ makeRequest('<%=SetupBean.CMDSetup%>','');
 } else if (bean.getAccount()==null)
 {
 %>
+// Every signed-out render lands here - logout, and any command that fell back to welcome
+// because the session had expired. The player is a sibling of the panel, so replacing the
+// panel leaves it playing over the login screen; fullwindow has to go too, because that
+// class forces the player visible regardless of whether the video still has a source.
+if (video && video.src)video.removeAttribute('src');
+setFullWindow(false);
 var loginwin;
 setMessageListener(function(e) 
 {

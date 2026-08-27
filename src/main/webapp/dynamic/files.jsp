@@ -151,7 +151,7 @@ var showCover=document.getElementById("showCover");
 
 function itemClick(event)
 {
-	if (event.currentTarget && event.currentTarget.dataset && event.currentTarget.dataset.url && event.currentTarget.dataset.type)
+	if (event.currentTarget && event.currentTarget.dataset && event.currentTarget.dataset.url!==undefined && event.currentTarget.dataset.type)
 	{
 		var type=event.currentTarget.dataset.type;
 		if (type==1 || type==2 || type==5)makeRequest('<%=bean.CMDBrowse%>/'+event.currentTarget.dataset.url,null,true);

@@ -86,7 +86,7 @@ for (int i=0;i<ni;)
     %><li data-url="<%=Escape.html(file.getPath()!=null?file.getPath():"")%>" data-type="<%=file.getType()%>" <%if (type!=FileItem.TYPEFILE)out.print("data-time=\""+file.getTimeProgress()+"\"");%> class="<%=tagClass%>" tabindex="0"><%
     if ("video".equals(tagClass))
     {
-      %><img src="/<%=Escape.html(bean.CMDThumbMP4+"/"+file.getPath())%>" loading="lazy" title="<%=Escape.html(file.getName())%>"><%
+      %><img src="/<%=Escape.urlPath(bean.CMDThumbMP4+"/"+file.getPath())%>" loading="lazy" title="<%=Escape.html(file.getName())%>"><%
     }
     %><span><%=Escape.html(file.getName())%></span></li><%
   }
@@ -112,7 +112,7 @@ if (videos.size()>1)
   {
     FileItem file = recent.get(k);
 %>  <li data-url="<%=Escape.html(file.getPath())%>" data-type="<%=file.getType()%>" <%if (file.getTimeProgress()>0)out.print("data-time=\""+file.getTimeProgress()+"\"");%> class="video" tabindex="0">
-      <img src="/<%=Escape.html(bean.CMDThumbMP4+"/"+file.getPath())%>" loading="lazy" title="<%=Escape.html(file.getName())%>">
+      <img src="/<%=Escape.urlPath(bean.CMDThumbMP4+"/"+file.getPath())%>" loading="lazy" title="<%=Escape.html(file.getName())%>">
       <span><%=Escape.html(file.getName())%></span>
     </li>
 <%
@@ -128,7 +128,7 @@ if (videos.size()>1)
   {
     FileItem file = videos.get(k);
 %>  <li data-url="<%=Escape.html(file.getPath())%>" data-type="<%=file.getType()%>" <%if (file.getTimeProgress()>0)out.print("data-time=\""+file.getTimeProgress()+"\"");%> class="video" tabindex="0">
-      <img src="/<%=Escape.html(bean.CMDThumbMP4+"/"+file.getPath())%>" loading="lazy" title="<%=Escape.html(file.getName())%>">
+      <img src="/<%=Escape.urlPath(bean.CMDThumbMP4+"/"+file.getPath())%>" loading="lazy" title="<%=Escape.html(file.getName())%>">
       <span><%=Escape.html(file.getName())%></span>
     </li>
 <%
@@ -154,12 +154,12 @@ function itemClick(event)
 	if (event.currentTarget && event.currentTarget.dataset && event.currentTarget.dataset.url!==undefined && event.currentTarget.dataset.type)
 	{
 		var type=event.currentTarget.dataset.type;
-		if (type==1 || type==2 || type==5)makeRequest('<%=bean.CMDBrowse%>/'+event.currentTarget.dataset.url,null,true);
+		if (type==1 || type==2 || type==5)makeRequest('<%=bean.CMDBrowse%>/'+encodePath(event.currentTarget.dataset.url),null,true);
 		else if (type==3)
 		{
 			showCover.firstElementChild.innerHTML='';
 			var img=document.createElement("img");
-			img.src='/<%=bean.CMDCoverMP4%>/'+event.currentTarget.dataset.url;
+			img.src='/<%=bean.CMDCoverMP4%>/'+encodePath(event.currentTarget.dataset.url);
 			img.addEventListener('load',function(){img.style.setProperty('--img-aspect',img.naturalWidth/img.naturalHeight);})
 			showCover.firstElementChild.appendChild(img);
 			targetMedia='/<%=StreamBean.CMDStream%>/<%=bean.getSessionId()%>/'+event.currentTarget.dataset.url;
@@ -226,7 +226,7 @@ if (fileWatch)
 	});
 	fileWatch.addEventListener("load",imageLoad,true);
 	fileWatch.addEventListener("error",imageError,true);
-	makeRequest('fileswatch/'+fileWatch.getAttribute('path'),'',false);
+	makeRequest('fileswatch/'+encodePath(fileWatch.getAttribute('path')),'',false);
 }
 //if (fileWatch)makeRequest('fileswatch','path='+encodeURIComponent(fileWatch.getAttribute('path')),false);
 </script>

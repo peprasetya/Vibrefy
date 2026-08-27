@@ -10,7 +10,21 @@ let checkWatch=false;
 let menu,menucb,menubtn,panel,mediaFile,targetMedia,targetSubtitle,targetSubtitleList,video,progressBar,progressFill,currentTimeEl,totalDurationEl;
 let playerMenus=[],subtitleBtn,subtitleMenu;
 
-function makeRequest(url,data,savingState) 
+// A raw filename can contain characters that are reserved in a URL - a bare '?' most
+// dangerously, since it turns everything after it into a query string, silently
+// truncating the path the server receives. Encoding each '/'-separated segment (never
+// the separators themselves) keeps a real folder structure intact while making every
+// segment's content safe. Called only at the point a path is actually handed to the
+// browser as a request - never when a path is just being stored or compared - so the
+// character-length arithmetic elsewhere (next-episode lookups) keeps working on the
+// untouched raw strings.
+function encodePath(path)
+{
+ if (!path)return path;
+ return path.split('/').map(encodeURIComponent).join('/');
+}
+
+function makeRequest(url,data,savingState)
 {
   var httpRequest;
 
@@ -338,7 +352,7 @@ function loadSubtitleTracks()
     return;
   }
   var request=new XMLHttpRequest();
-  request.open('GET',targetSubtitleList,true);
+  request.open('GET',encodePath(targetSubtitleList),true);
   request.onreadystatechange=function()
   {
     if (request.readyState!==4)return;
@@ -356,7 +370,7 @@ function loadSubtitleTracks()
       track.kind='subtitles';
       track.label=tracks[i].label;
       if (tracks[i].lang)track.srclang=tracks[i].lang;
-      track.src=targetSubtitle+'?track='+tracks[i].index;
+      track.src=encodePath(targetSubtitle)+'?track='+tracks[i].index;
       track.setAttribute('data-added-by','external');
       if (i===0)track.default=true;
       video.appendChild(track);
@@ -812,7 +826,7 @@ function autoPlayNext(finished)
  if (targetMedia.indexOf('/stream/')!==0)return false;
  var listUrl='/medialist/'+targetMedia.substring('/stream/'.length);
  var request=new XMLHttpRequest();
- request.open('GET',listUrl,true);
+ request.open('GET',encodePath(listUrl),true);
  request.onreadystatechange=function()
  {
   if (request.readyState!==4)return;
@@ -842,7 +856,7 @@ function playTarget() {
   var oldTracks = video.querySelectorAll('track[data-added-by="external"]');
   for (var i = 0; i < oldTracks.length; i++) video.removeChild(oldTracks[i]);
 
-  video.src = targetMedia;
+  video.src = encodePath(targetMedia);
 
   function hasNativeSubtitles() {
     var tracks = video.textTracks;

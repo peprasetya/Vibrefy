@@ -1,6 +1,7 @@
 package id.prasetya.vibrefy.data;
 
 import java.io.File;
+import java.text.Normalizer;
 import java.util.Arrays;
 import java.util.Optional; // For modern null handling and optional results
 import java.util.stream.IntStream; // For streaming JSONArray
@@ -129,7 +130,48 @@ public class PathMap
       }
       this.oriPath=effectiveOriPath;
 
+      if (this.oriPath!=null && this.subPaths.length>0)
+      {
+        // A filename can reach the server in a different Unicode normalization form than
+        // the one actually stored on disk - e.g. a Japanese dakuten mark arriving
+        // precomposed (NFC) while the filesystem holds it decomposed into base
+        // character + combining mark (NFD), or the reverse, typically because the file
+        // crossed over from a different OS or filesystem than the rest of the library. A
+        // byte-exact File lookup then fails to find a file that is plainly there, with no
+        // exception anywhere to report it. Resolve each segment against its real
+        // directory entry so every consumer of realPath - browsing, thumbnails, cover
+        // art, streaming, subtitles - gets a name the filesystem will actually match, and
+        // keep the corrected name in subPaths so breadcrumbs and further navigation carry
+        // it forward instead of re-triggering this on the next click.
+        File cursor=new File(this.oriPath);
+        for (int i=0;i<this.subPaths.length;i++)
+        {
+          this.subPaths[i]=resolveSegment(cursor,this.subPaths[i]);
+          cursor=new File(cursor,this.subPaths[i]);
+        }
+        this.subPath=String.join(File.separator,this.subPaths);
+      }
+
       this.realPath=(this.oriPath!=null)?this.oriPath+File.separator+(this.subPath==null?"":this.subPath):null;
     }
+  }
+
+  /**
+   * Matches a path segment against its real entry in dir, tolerating a Unicode
+   * normalization mismatch between what the request carried and what the filesystem
+   * stored. Falls back to the segment as given - including when dir cannot be listed -
+   * so a genuinely missing file still reports missing exactly as before.
+   */
+  private static String resolveSegment(File dir,String segment)
+  {
+    if (new File(dir,segment).exists())return segment;
+    String targetNfc=Normalizer.normalize(segment,Normalizer.Form.NFC);
+    File[] children=dir.listFiles();
+    if (children==null)return segment;
+    for (File child:children)
+    {
+      if (Normalizer.normalize(child.getName(),Normalizer.Form.NFC).equals(targetNfc))return child.getName();
+    }
+    return segment;
   }
 }

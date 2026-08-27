@@ -41,7 +41,7 @@ for (int i=0;i<ni;)
   %><li data-url="<%=Escape.html(file.getPath()!=null?file.getPath():"")%>" data-type="<%=file.getType()%>" data-time="<%=file.getTimeProgress()%>" class="<%=tagClass%>" tabindex="0"><%
   if ("video".equals(tagClass))
   {
-    %><img lsrc="/<%=Escape.html(BrowseBean.CMDThumbMP4+"/"+file.getPath())%>"><%
+    %><img lsrc="/<%=Escape.urlPath(BrowseBean.CMDThumbMP4+"/"+file.getPath())%>"><%
   }
   %><span><%=Escape.html(file.getName())%></span></li><%
   if ((++i<ni && type!=files[i].getType()) || i==ni)

@@ -25,7 +25,7 @@ function itemClick(event)
 		{
 			showCover.firstElementChild.innerHTML='';
 			var img=document.createElement("img");
-			img.src='/<%=BrowseBean.CMDCoverMP4%>/'+event.currentTarget.dataset.url;
+			img.src='/<%=BrowseBean.CMDCoverMP4%>/'+encodePath(event.currentTarget.dataset.url);
 			img.addEventListener('load',function(){img.style.setProperty('--img-aspect',img.naturalWidth/img.naturalHeight);})
 			showCover.firstElementChild.appendChild(img);
 			targetMedia='/<%=StreamBean.CMDStream%>/<%=bean.getSessionId()%>/'+event.currentTarget.dataset.url;

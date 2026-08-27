@@ -20,7 +20,7 @@ if (bean.getPrePath()==null)
     subPaths[0]="/";
   }
   fpath.append(bean.getPrePath());
-  %><span data-url="/" data-type="1" tabstop="0">Library</span>/<span data-url="<%=Escape.html(fpath.toString())%>" data-type="1" tabindex="0"><%=Escape.html(bean.getPrePath())%></span>/<%
+  %><span data-url="" data-type="1" tabindex="0">Library</span>/<span data-url="<%=Escape.html(fpath.toString())%>" data-type="1" tabindex="0"><%=Escape.html(bean.getPrePath())%></span>/<%
   for (String path:subPaths)
   {
     fpath.append("/"+path);

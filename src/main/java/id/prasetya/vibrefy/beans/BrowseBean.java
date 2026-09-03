@@ -60,6 +60,10 @@ public class BrowseBean extends BeanObject implements Comparator<Object>
 
   protected void processData()
   {
+    // Before the guards below, so a path that fails to resolve still answers as JSON
+    // rather than falling back to the HTML shell. Gated on the command because the
+    // thumbnail and cover branches of this same bean set their own image types.
+    if (CMDBrowse.equalsIgnoreCase(path.getCommand()) && wantsJson())contentType=Portal.JSON_TYPE;
     if (path.getLength()<2)return;
     if (path.isCloud())
     {
@@ -569,6 +573,49 @@ public class BrowseBean extends BeanObject implements Comparator<Object>
     return new ByteArrayInputStream(bos.toByteArray());
   }
   
+  /**
+   * The browse listing as JSON - the same data dynamic/files.jsp renders. The root
+   * listing, with no library in the path, is already the library list (volumes plus cloud
+   * mounts), so one endpoint covers both.
+   *
+   * The per-folder "Recent Update" and "Random Suggestions" strips are deliberately not
+   * included: both are derived from this same item list, so the caller sorts or shuffles
+   * what it already holds instead of us sending it twice.
+   */
+  public String getJson()
+  {
+    JSONObject result=new JSONObject();
+    // The caller needs this to build /stream/<session>/<path> itself - that segment is
+    // structurally required by PathMap, and a native client has no page to read it from.
+    result.put("session",session==null?"":session.getId());
+    JSONArray crumbs=new JSONArray();
+    StringBuilder full=new StringBuilder();
+    String library=path.getLibrary();
+    if (library!=null)
+    {
+      crumbs.put(library);
+      full.append(library);
+      String[] subs=path.getSubPaths();
+      if (subs!=null)for (String sub:subs)
+      {
+        if (sub==null || sub.length()==0)continue;
+        crumbs.put(sub);
+        full.append('/').append(sub);
+      }
+    }
+    result.put("library",library==null?JSONObject.NULL:library);
+    result.put("path",full.toString());
+    result.put("crumbs",crumbs);
+    result.put("admin",isAdmin());
+    result.put("cloud",isCloudPath());
+    if (message!=null)result.put("error",message);
+    JSONArray items=new JSONArray();
+    // listFiles sorts in place and would throw on a path that never produced a listing.
+    if (fileItem!=null)for (FileItem file:listFiles())items.put(file.toJSON());
+    result.put("items",items);
+    return result.toString();
+  }
+
   public String getPrePath()
   {
     return path.getLibrary();

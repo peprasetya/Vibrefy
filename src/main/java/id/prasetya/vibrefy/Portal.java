@@ -41,6 +41,7 @@ public class Portal extends HttpServlet implements Filter
   public static final String MULTIPART_FORMDATA_TYPE = "multipart/form-data";
   public static final String DEFAULT_TYPE = "text/html; charset=utf-8";
   public static final String VIDEO_MP4_TYPE = "video/mp4";
+  public static final String JSON_TYPE = "application/json; charset=utf-8";
   
   private FilterConfig filterConfig;
   private static JSONObject data=new JSONObject();
@@ -186,6 +187,32 @@ public class Portal extends HttpServlet implements Filter
     }
   }
 
+  /**
+   * True when the caller wants JSON rather than the HTML shell or the Ajax/XML UI. Read
+   * from the Accept header so no URL or parameter changes: browsers ask for text/html and
+   * keep getting the shell (which is what makes a bookmarked /files/... URL still work),
+   * while a native client sets application/json explicitly. The ajaxcall check is on the
+   * raw parameter rather than BeanObject.isAjaxCall so this also answers correctly before
+   * the bean has been populated.
+   */
+  public static boolean wantsJson(HttpServletRequest request)
+  {
+    if ("1".equals(request.getParameter("ajaxcall")))return false;
+    String accept=request.getHeader("Accept");
+    return accept!=null && accept.contains("application/json");
+  }
+
+  private void sendJson(HttpServletResponse response,int status,JSONObject body)
+  {
+    try
+    {
+      response.setStatus(status);
+      response.setContentType(JSON_TYPE);
+      response.setHeader("Cache-Control","private, no-cache, no-store, must-revalidate, max-age = 0");
+      response.getWriter().print(body.toString());
+    }catch (IOException e){}
+  }
+
   public static void setProperties(Object bean, ServletRequest request)
   {
     Enumeration<?> e = request.getParameterNames();
@@ -268,6 +295,14 @@ public class Portal extends HttpServlet implements Filter
         }
         if (cmd.getAccessType()>0 && account==null)
         {
+          // Rewriting to the welcome page answers a JSON caller with an HTML body at
+          // status 200, which it cannot tell apart from an empty library. Give it
+          // something it can act on - that is how a client knows to pair again.
+          if (wantsJson(request))
+          {
+            sendJson(response,HttpServletResponse.SC_UNAUTHORIZED,new JSONObject().put("error","unauthenticated"));
+            return;
+          }
           command=BeanObject.CMDWelcome;
           cmd=Command.getCommand(command);
         }

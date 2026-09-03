@@ -1,5 +1,7 @@
 package id.prasetya.vibrefy.beans;
 
+import org.json.JSONObject;
+
 import id.prasetya.vibrefy.Portal;
 import id.prasetya.vibrefy.SessionTracker;
 import id.prasetya.vibrefy.tools.Pairing;
@@ -63,8 +65,36 @@ public class PairBean extends BeanObject
     return found==null?0:found.getRemaining();
   }
 
+  /**
+   * The pairing state as JSON, so a client with no browser can drive the same flow: either
+   * Request then Poll (this device shows a code, someone approves it elsewhere), or Claim
+   * (this device enters a code shown on a signed-in one). Both end with this session
+   * signed in and its cookie rotated, exactly as the browser flow does.
+   */
+  public String getJson()
+  {
+    JSONObject result=new JSONObject();
+    String state="idle";
+    if (MODEPoll.equals(mode))
+    {
+      if (POLLDone.equals(pollState))state="done";
+      else if (POLLExpired.equals(pollState))state="expired";
+      else state="waiting";
+    } else if (MODEWait.equals(mode))state="waiting";
+    else if (MODEOffer.equals(mode))state="offered";
+    else if (message!=null)state="invalid";
+    result.put("state",state);
+    if (code!=null)result.put("code",code);
+    if (found!=null)result.put("seconds",getRemaining());
+    if (message!=null)result.put("message",message);
+    result.put("account",account==null?JSONObject.NULL:account);
+    return result.toString();
+  }
+
   protected void processData()
   {
+    // Before every branch below, so a rejected or expired code still answers as JSON.
+    if (wantsJson())contentType=Portal.JSON_TYPE;
     String order=getOrder();
     if (order==null)
     {

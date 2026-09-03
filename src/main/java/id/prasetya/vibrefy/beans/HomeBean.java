@@ -6,6 +6,7 @@ import java.util.Comparator;
 
 import org.json.*;
 
+import id.prasetya.vibrefy.Portal;
 import id.prasetya.vibrefy.SessionTracker;
 import id.prasetya.vibrefy.data.*;
 import id.prasetya.vibrefy.tools.cloud.CloudConfig;
@@ -20,8 +21,25 @@ public class HomeBean extends BeanObject
   
   protected void processData()
   {
+    // Only the home command answers JSON; homepart stays on the Ajax/XML path that the
+    // three browser shelves use, and has no content JSP of its own.
+    if (COMMAND.equalsIgnoreCase(path.getCommand()) && wantsJson())contentType=Portal.JSON_TYPE;
   }
-  
+
+  /**
+   * The watch list as JSON. New and Random are not emitted: neither has any backing data,
+   * and without a database working them out would mean a recursive walk of every library
+   * on each load.
+   */
+  public String getJson()
+  {
+    JSONObject result=new JSONObject();
+    JSONArray watching=new JSONArray();
+    for (FileItem file:getResumable())watching.put(file.toJSON());
+    result.put("watching",watching);
+    return result.toString();
+  }
+
   public FileItem[] getResumable()
   {
     ArrayList<FileItem> rst=new ArrayList<>();

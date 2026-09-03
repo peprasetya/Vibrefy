@@ -67,6 +67,16 @@ public class BeanObject
   
   public String getOrder() {return order;}
 
+  /**
+   * True when this caller wants JSON instead of the HTML shell or the Ajax/XML UI. A bean
+   * that answers JSON must set contentType before its own guards, the way MediaListBean
+   * does, so a path that fails to resolve still answers as JSON.
+   */
+  protected boolean wantsJson()
+  {
+    return request!=null && Portal.wantsJson(request);
+  }
+
   protected void processData()
   {
   }

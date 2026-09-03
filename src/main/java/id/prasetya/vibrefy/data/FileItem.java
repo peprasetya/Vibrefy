@@ -1,5 +1,7 @@
 package id.prasetya.vibrefy.data;
 
+import org.json.JSONObject;
+
 public class FileItem
 {
   public static final short TYPEVOLUMES=1;
@@ -49,5 +51,21 @@ public class FileItem
     this.type=type;
     this.timeProgress=timeProgress;
     this.sortTime=sortTime;
+  }
+
+  /**
+   * The wire shape shared by the browse listing, the watch list, and any client that
+   * renders them. Kept here rather than in each bean so the two listings cannot drift.
+   * "type" is the TYPE* constants above, which the web client already keys on.
+   */
+  public JSONObject toJSON()
+  {
+    JSONObject item=new JSONObject();
+    item.put("name",name==null?"":name);
+    item.put("path",path==null?"":path);
+    item.put("type",type);
+    item.put("time",timeProgress);
+    item.put("modified",modified);
+    return item;
   }
 }

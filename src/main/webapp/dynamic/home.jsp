@@ -38,41 +38,11 @@ function itemClick(event)
 	}
 }
 
-function imageLoad()
-{
-	event.currentTarget.setAttribute("cload","true");
-}
-
-function imageError()
-{
-	event.currentTarget.setAttribute("cerr","true");
-}
-
-function initList()
-{
-	var groupShow=document.getElementsByClassName("groupShow");
-	for (var i=0,ni=groupShow.length;i<ni;i++)
-	{
-		if (!groupShow[i].hasAttribute('uninit'))continue;
-		groupShow[i].removeAttribute('uninit');
-		var lis=groupShow[i].getElementsByTagName("li");
-		for (var j=0,nj=lis.length;j<nj;j++)
-		{
-			lis[j].addEventListener("click",itemClick);
-			var ims=lis[j].getElementsByTagName("img");
-			if (ims.length>0)for (var k=0,nk=ims.length;k<nk;k++)
-			{
-				ims[k].setAttribute("loading","lazy");
-				ims[k].addEventListener("load",imageLoad);
-				ims[k].addEventListener("error",imageError);
-				ims[k].src=ims[k].getAttribute("lsrc");
-				ims[k].removeAttribute("lsrc");
-				ims[k].title=ims[k].nextElementSibling.textContent;
-			}
-		}
-	}
-}
-makeRequest('homepart','order=<%=bean.ORDWatch%>');
+// The watch shelf is rendered by scriptlib's renderShelf from the JSON at /home - the same
+// data a native client reads - so the item markup lives in exactly one place. The wiring
+// that initList used to do (click handlers, lazy loading, the lsrc swap) now happens in
+// renderItem as each element is created.
+loadWatching();
 </script>
 </ajax>
  

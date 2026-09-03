@@ -94,7 +94,109 @@ function ajaxSubmit(url,form,saveState)
   return false;
 }
 
-function alertContents(httpRequest) 
+// The JSON transport, alongside makeRequest's Ajax/XML one. Deliberately does not touch
+// history or the menu selection: this fetches data into a page that is already open,
+// where makeRequest performs a navigation.
+function requestJson(url,data,onData)
+{
+  var request=new XMLHttpRequest();
+  request.open('POST','/'+encodePath(url),true);
+  request.setRequestHeader('Content-Type','application/x-www-form-urlencoded');
+  // What routes this to the JSON answer instead of the HTML shell. No ajaxcall here.
+  request.setRequestHeader('Accept','application/json');
+  request.onreadystatechange=function()
+  {
+    if (request.readyState!==4)return;
+    if (request.status!==200)
+    {
+      // The session went away. Reload into the sign-in screen rather than leaving a page
+      // that quietly renders nothing.
+      if (request.status===401)window.location.href='/';
+      return;
+    }
+    var parsed=null;
+    try
+    {
+      parsed=JSON.parse(request.responseText);
+    } catch (e)
+    {
+      console.warn('Unable to read '+url+':',e);
+      return;
+    }
+    onData(parsed);
+  };
+  request.send(data);
+}
+
+// The FileItem type constants, mapped to the CSS classes the stylesheet already uses.
+function itemClass(item)
+{
+  if (item.type==1)return 'library';
+  if (item.type==2)return 'folder';
+  if (item.type==5)return 'cloud';
+  if (item.type!=3)return '';
+  var name=String(item.name||'').toLowerCase();
+  if (name.endsWith('.mp4') || name.endsWith('.m4v'))return 'video';
+  return 'file';
+}
+
+// One <li>, built the same way for every shelf. Uses createElement and textContent rather
+// than innerHTML: a filename is untrusted input, and this is the point where the server's
+// Escape.html stopped standing between it and the DOM.
+function renderItem(item,onClick)
+{
+  var li=document.createElement('li');
+  li.className=itemClass(item);
+  li.setAttribute('data-url',item.path);
+  li.setAttribute('data-type',item.type);
+  if (item.time)li.setAttribute('data-time',item.time);
+  li.setAttribute('tabindex','0');
+  if (li.className==='video')
+  {
+    var img=document.createElement('img');
+    img.loading='lazy';
+    img.title=item.name;
+    img.addEventListener('load',function(){img.setAttribute('cload','true');});
+    img.addEventListener('error',function(){img.setAttribute('cerr','true');});
+    img.src='/thumbmp4/'+encodePath(item.path);
+    li.appendChild(img);
+  }
+  var span=document.createElement('span');
+  span.textContent=item.name;
+  li.appendChild(span);
+  if (onClick)li.addEventListener('click',onClick);
+  return li;
+}
+
+function renderShelf(container,title,items,onClick)
+{
+  while (container.firstChild)container.removeChild(container.lastChild);
+  if (!items || items.length===0)return;
+  var group=document.createElement('div');
+  group.className='groupShow';
+  var head=document.createElement('div');
+  head.textContent=title;
+  group.appendChild(head);
+  var list=document.createElement('ul');
+  for (var i=0,ni=items.length;i<ni;i++)list.appendChild(renderItem(items[i],onClick));
+  group.appendChild(list);
+  container.appendChild(group);
+}
+
+// The Home watch shelf, from the same JSON a native client reads. Called on page load and
+// again after a video finishes, so both paths render it identically.
+function loadWatching()
+{
+  var target=document.getElementById('homepartwatch');
+  if (!target)return;
+  var onClick=(typeof itemClick==='function')?itemClick:null;
+  requestJson('home','',function(data)
+  {
+    renderShelf(target,'Watching...',data.watching,onClick);
+  });
+}
+
+function alertContents(httpRequest)
 {
   var statdiv=document.getElementById("logstat");
   if (httpRequest.readyState == 4) 
@@ -136,7 +238,7 @@ function alertContents(httpRequest)
        else if ('initMenu'==item)
        {
     	 initMenu();
-       } else if ('initList'==item && initList)initList();
+       } else if ('initList'==item && typeof initList==='function')initList();
       }
       var newScripts=xd.getElementsByTagName('script');
       if (newScripts.length>0)
@@ -712,7 +814,7 @@ window.addEventListener("DOMContentLoaded",function()
   var finished=mediaFile;
   video.mediaFile=false;
   if (!autoPlayNext(finished))video.removeAttribute('src');
-  if(document.getElementById("homepartwatch"))setTimeout(function(){makeRequest('homepart','order=watch');},1000);
+  if(document.getElementById("homepartwatch"))setTimeout(function(){loadWatching();},1000);
   let fileWatch=document.getElementById("fileswatch");
   if (fileWatch)setTimeout(function(){makeRequest('fileswatch/'+fileWatch.getAttribute('path'),'',false);},1000);
  });

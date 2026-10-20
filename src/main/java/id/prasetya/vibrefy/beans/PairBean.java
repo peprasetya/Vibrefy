@@ -1,5 +1,8 @@
 package id.prasetya.vibrefy.beans;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+
 import org.json.JSONObject;
 
 import id.prasetya.vibrefy.Portal;
@@ -29,6 +32,7 @@ public class PairBean extends BeanObject
   public static final String ORDApprove="Approve";
   public static final String ORDOffer="Offer";
   public static final String ORDClaim="Claim";
+  public static final String ORDLink="Link";
 
   /** Signed in, nothing in flight: the Devices page. */
   public static final String MODEHome="H";
@@ -42,23 +46,42 @@ public class PairBean extends BeanObject
   public static final String MODEClaim="E";
   /** A poll tick. Renders only the status block, never the whole panel. */
   public static final String MODEPoll="P";
+  /** Not signed in, a client registered a link key and is about to open a browser. */
+  public static final String MODELink="K";
 
   public static final String POLLWaiting="W";
   public static final String POLLDone="D";
   public static final String POLLExpired="X";
 
   private String code=null;
+  private String key=null;
   private String mode=MODEHome;
   private String pollState=POLLWaiting;
   private Pairing.Entry found=null;
+  private boolean fromLink=false;
 
   public void setCode(String newValue){code=newValue;}
+  public void setKey(String newValue){key=newValue;}
+  public boolean isFromLink(){return fromLink;}
 
   public String getMode(){return mode;}
   public String getPollState(){return pollState;}
   public String getCode(){return code==null?"":code;}
   public String getDisplayCode(){return Pairing.format(code);}
   public Pairing.Entry getFound(){return found;}
+
+  /**
+   * The address a desktop client hands to a browser so its user can approve the pairing.
+   * The key sits in the path rather than the query string on purpose: a signed-out hit
+   * boots maintemplate, and menu.jsp resumes by re-requesting window.location.pathname,
+   * which keeps the path and drops the query. In the path the key survives the whole
+   * Google sign-in and the browser lands straight on the approval screen.
+   */
+  public String getLinkUrl()
+  {
+    if (code==null)return "";
+    return publicBase()+CMDPair+"/"+code;
+  }
 
   public long getRemaining()
   {
@@ -80,11 +103,12 @@ public class PairBean extends BeanObject
       if (POLLDone.equals(pollState))state="done";
       else if (POLLExpired.equals(pollState))state="expired";
       else state="waiting";
-    } else if (MODEWait.equals(mode))state="waiting";
+    } else if (MODEWait.equals(mode) || MODELink.equals(mode))state="waiting";
     else if (MODEOffer.equals(mode))state="offered";
     else if (message!=null)state="invalid";
     result.put("state",state);
     if (code!=null)result.put("code",code);
+    if (MODELink.equals(mode))result.put("url",getLinkUrl());
     if (found!=null)result.put("seconds",getRemaining());
     if (message!=null)result.put("message",message);
     result.put("account",account==null?JSONObject.NULL:account);
@@ -98,7 +122,28 @@ public class PairBean extends BeanObject
     String order=getOrder();
     if (order==null)
     {
+      // A desktop client's sign-in link, /pair/<key>. Landing here signed in is the whole
+      // point of the link, so go straight to the approval screen instead of the code form.
+      String linked=linkKey();
+      if (linked!=null)
+      {
+        if (account==null)
+        {
+          mode=MODEClaim;
+          message="Sign in first, then open the link from your app again.";
+          return;
+        }
+        code=linked;
+        fromLink=true;
+        find();
+        return;
+      }
       mode=(account==null)?MODEClaim:MODEHome;
+      return;
+    }
+    if (ORDLink.equals(order))
+    {
+      requestLink();
       return;
     }
 
@@ -152,6 +197,46 @@ public class PairBean extends BeanObject
     }
     code=found.getCode();
     mode=MODEWait;
+  }
+
+  /**
+   * The key from /pair/<key>, or null for a plain /pair hit. PathMap has already split the
+   * URI, so the segment after the command is sitting in its library slot.
+   */
+  private String linkKey()
+  {
+    if (path==null)return null;
+    String segment=path.getLibrary();
+    return Pairing.isLinkKey(segment)?segment:null;
+  }
+
+  /**
+   * A desktop client registering the key it generated, before it opens a browser at the
+   * link. Bound to the client's own session exactly as a typed code is, so the key alone
+   * still cannot collect the approval - only the session that registered it can poll it.
+   */
+  private void requestLink()
+  {
+    if (account!=null)
+    {
+      mode=MODEHome;
+      return;
+    }
+    if (!Pairing.isLinkKey(key))
+    {
+      mode=MODEClaim;
+      message="That key is not usable. Use "+Pairing.LINKMINLENGTH+" to "+Pairing.LINKMAXLENGTH+" characters from A-Z, a-z, 0-9, '-' and '_'.";
+      return;
+    }
+    found=Pairing.createDevice(session.getId(),address(),request.getHeader("User-Agent"),key);
+    if (found==null)
+    {
+      mode=MODEClaim;
+      message="That key is already in use, or too many pairings are in progress. Generate a new key and try again.";
+      return;
+    }
+    code=found.getCode();
+    mode=MODELink;
   }
 
   /**
@@ -277,18 +362,40 @@ public class PairBean extends BeanObject
   }
 
   /**
-   * The client address as the approver should see it. Behind a proxy the direct address
-   * is the proxy's, so the forwarded list is read first - its first entry is the client.
+   * The client address, for the attempt throttle and for the approver to see. Forwarded
+   * headers are only believed when the connection itself came from a proxy on this machine
+   * or network; from anywhere else a client could send one and pick a fresh address for
+   * every guess. And the rightmost entry is taken, not the first: each proxy appends the
+   * address it saw, so the first entry is whatever the client chose to send.
+   *
+   * Behind two proxies (Cloudflare in front of nginx) the rightmost entry is the Cloudflare
+   * edge, so the throttle groups by edge rather than by client. That fails coarse, never open.
    */
   private String address()
   {
+    String direct=request.getRemoteAddr();
+    if (!isLocal(direct))return direct;
     String forwarded=request.getHeader("X-Forwarded-For");
-    if (forwarded!=null && forwarded.trim().length()>0)
+    if (forwarded==null || forwarded.trim().length()==0)return direct;
+    String last=forwarded.substring(forwarded.lastIndexOf(',')+1).trim();
+    return last.length()>0?last:direct;
+  }
+
+  /** Loopback or private, which is where a proxy fronting this server connects from. */
+  private static boolean isLocal(String address)
+  {
+    try
     {
-      int comma=forwarded.indexOf(',');
-      return (comma>0?forwarded.substring(0,comma):forwarded).trim();
+      // A literal address, as getRemoteAddr always returns, is parsed without a DNS lookup.
+      InetAddress inet=InetAddress.getByName(address);
+      if (inet.isLoopbackAddress() || inet.isSiteLocalAddress() || inet.isLinkLocalAddress())return true;
+      // IPv6 unique-local, fc00::/7, which isSiteLocalAddress does not cover.
+      byte[] raw=inet.getAddress();
+      return raw.length==16 && (raw[0]&0xfe)==0xfc;
+    } catch (UnknownHostException e)
+    {
+      return false;
     }
-    return request.getRemoteAddr();
   }
 
   /**

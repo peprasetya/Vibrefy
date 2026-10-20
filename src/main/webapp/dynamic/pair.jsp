@@ -146,6 +146,15 @@ if (video && video.src)video.removeAttribute('src');
 setFullWindow(false);
 <%
   }
+  if (PairBean.MODEConfirm.equals(mode) && bean.isFromLink())
+  {
+%>
+// The link key is single use and one click from being spent. Take it out of the address
+// bar now, so a refresh lands on Devices instead of re-requesting a key that no longer
+// exists - which would read as a wrong code and spend one of the five attempts.
+history.replaceState(null,"","/<%=PairBean.CMDPair%>");
+<%
+  }
 %>
 
 function pairCodeValue()

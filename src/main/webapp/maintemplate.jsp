@@ -1,4 +1,17 @@
-<%@page pageEncoding="UTF-8" %><jsp:useBean id="bean" scope="request" class="id.prasetya.vibrefy.beans.BeanObject" /><html>
+<%@page pageEncoding="UTF-8" %><jsp:useBean id="bean" scope="request" class="id.prasetya.vibrefy.beans.BeanObject" /><%!
+// Versions an asset URL by the file's own modified time, so the browser keeps it cached
+// until it actually changes and still picks up every edit straight away. Startup time is
+// the fallback when the container serves from somewhere with no file to look at.
+private static final long STARTED=System.currentTimeMillis();
+
+private static long stamp(jakarta.servlet.ServletContext context,String path)
+{
+  String real=context.getRealPath(path);
+  if (real==null)return STARTED;
+  long modified=new java.io.File(real).lastModified();
+  return modified>0?modified:STARTED;
+}
+%><html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1">
@@ -6,9 +19,8 @@
 <title>Vibrefy - Vibrate the Souls!!</title>
 <link rel="icon" type="image/svg+xml" href="/images/vibrefy.svg">
 <link rel="apple-touch-icon" href="/images/vibrefy.svg">
-<link rel="stylesheet" href="/maintemplate.css?<%=System.currentTimeMillis()%>">
-<script src="/scriptlib.js?<%=System.currentTimeMillis()%>"></script>
-<script src="https://unpkg.com/scrollreveal@4.0.9/dist/scrollreveal.min.js"></script>
+<link rel="stylesheet" href="/maintemplate.css?<%=stamp(application,"/maintemplate.css")%>">
+<script src="/scriptlib.js?<%=stamp(application,"/scriptlib.js")%>"></script>
 </head>
 <body ontouchstart="">
 <input id="menucb" type="checkbox"><label id="menubtn" for="menucb"><div></div></label><label class="menuback" for="menucb"></label>
@@ -42,17 +54,6 @@
 </div></aside>
 <footer><div><img src="/images/vibrefy.svg" alt="Vibrefy" class="brandmark"><span>Vibrefy, light-weight media server.<br>Licensed under the MIT License.</span></div></footer>
 <script id="pageScript">
-window.addEventListener('load', function () 
-{
-  window.sr = ScrollReveal();
-  sr.reveal('.feature', {
-    duration: 600,
-    distance: '20px',
-    easing: 'cubic-bezier(0.215, 0.61, 0.355, 1)',
-    origin: 'bottom',
-    viewFactor: 0.2
-  });
-})
 makeRequest('<%=bean.getAccount()==null?"welcome":"menu"%>','');
 </script>
 </body>

@@ -6,7 +6,6 @@ import org.json.*;
 
 import id.prasetya.vibrefy.Portal;
 import id.prasetya.vibrefy.SessionTracker;
-import id.prasetya.vibrefy.data.CloudItem;
 import id.prasetya.vibrefy.data.CloudLink;
 import id.prasetya.vibrefy.tools.cloud.CloudConfig;
 import id.prasetya.vibrefy.tools.cloud.CloudProvider;
@@ -18,6 +17,10 @@ public class StreamBean extends BeanObject
   File file=null;
   long start=0;
   CloudLink cloudLink=null;
+  CloudProvider cloudProvider=null;
+  String cloudItemId=null;
+  boolean cloudCached=false;
+  long cloudSize=0;
 
   public File getFile() {return file;}
   public long getStart() {return start;}
@@ -87,15 +90,44 @@ public class StreamBean extends BeanObject
         removeProgress();
         return 0;
       }
-      CloudItem item=provider.getItem(itemId);
-      if (item==null || item.isFolder() || item.getSize()<=0)return 0;
-      cloudLink=provider.getDownloadLink(itemId);
-      return item.getSize();
+      CloudConfig.Stream stream=CloudConfig.openStream(path.getSession(),provider,itemId);
+      if (stream==null)return 0;
+      cloudProvider=provider;
+      cloudItemId=itemId;
+      cloudLink=stream.getLink();
+      cloudCached=stream.isCached();
+      cloudSize=stream.getSize();
+      return stream.getSize();
     } catch (IOException e)
     {
-      System.out.println("ERRSTREAMCLOUD:"+e.getMessage());
+      // Class only: the message of a failed cloud request can carry the file's URL.
+      System.out.println("ERRSTREAMCLOUD:"+e.getClass().getSimpleName());
       cloudLink=null;
       return 0;
+    }
+  }
+
+  /**
+   * Called when the provider refused the link that was handed out, which for a cached link
+   * means it expired or was revoked sooner than expected. Forgets it and fetches a fresh
+   * one. False when there is nothing to retry: the link was already fresh, or the file is
+   * no longer the size the response headers were written for.
+   */
+  public boolean refreshCloudLink()
+  {
+    if (!cloudCached || cloudProvider==null)return false;
+    CloudConfig.forgetStream(path.getSession(),cloudProvider,cloudItemId);
+    cloudCached=false;
+    try
+    {
+      CloudConfig.Stream stream=CloudConfig.openStream(path.getSession(),cloudProvider,cloudItemId);
+      if (stream==null || stream.getSize()!=cloudSize)return false;
+      cloudLink=stream.getLink();
+      return true;
+    } catch (IOException e)
+    {
+      System.out.println("ERRSTREAMCLOUD:"+e.getClass().getSimpleName());
+      return false;
     }
   }
 

@@ -404,7 +404,7 @@ public class Portal extends HttpServlet implements Filter
       rd.include(request,response);
     }catch (EOFException e)
     {
-      System.out.println("EOFException Test *************************************************************");
+      // The client went away mid-response, which seeking a stream does constantly.
     }catch (ServletException|IOException e)
     {
       if (e instanceof IOException && ((IOException)e).getCause() instanceof java.util.concurrent.TimeoutException)ignoreExcept=true;
@@ -414,7 +414,6 @@ public class Portal extends HttpServlet implements Filter
         return;
       }
       System.out.println("Portal NetTools trapped Exception");
-      System.out.println("IP Address: "+request.getRemoteAddr());
       e.printStackTrace(System.out);
     } catch (Exception e)
     {

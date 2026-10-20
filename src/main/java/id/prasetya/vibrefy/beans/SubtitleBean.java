@@ -13,6 +13,7 @@ import com.coremedia.iso.boxes.*;
 import id.prasetya.vibrefy.Portal;
 import id.prasetya.vibrefy.data.CloudItem;
 import id.prasetya.vibrefy.tools.cloud.CloudCache;
+import id.prasetya.vibrefy.tools.cloud.CloudConfig;
 import id.prasetya.vibrefy.tools.cloud.CloudProvider;
 import id.prasetya.vibrefy.tools.cloud.RemoteSource;
 
@@ -238,7 +239,7 @@ public class SubtitleBean extends BeanObject
    * Subtitles for a cloud file. Enumerating tracks only needs the moov box and is cheap,
    * but extracting cues is not: subtitle samples are interleaved across the whole file,
    * so it costs roughly one HTTP range request per cue. The finished WEBVTT is therefore
-   * cached on disk and the extraction only ever happens once per file and track.
+   * kept in memory, for this user only, so a replay does not repeat the extraction.
    */
   private void processCloud(boolean listOnly)
   {
@@ -249,7 +250,7 @@ public class SubtitleBean extends BeanObject
     if (!listOnly)
     {
       cacheId=path.getCloudLabel()+"|"+path.getCloudPath()+"|"+this.track;
-      String cached=CloudCache.read(CACHE_KIND,cacheId);
+      String cached=CloudCache.read(CloudConfig.getUserId(path.getSession()),CACHE_KIND,cacheId);
       if (cached!=null)
       {
         vttContent=cached;
@@ -301,10 +302,11 @@ public class SubtitleBean extends BeanObject
           if (read<target.length)throw new IOException("Short subtitle sample read at "+offset);
         }
       });
-      if (vttContent.length()>0)CloudCache.write(CACHE_KIND,cacheId,vttContent);
+      if (vttContent.length()>0 && cacheId!=null)CloudCache.write(CloudConfig.getUserId(path.getSession()),CACHE_KIND,cacheId,vttContent);
     } catch (Exception e)
     {
-      System.out.println("ERRCLOUDSUBTITLE:"+e.getMessage());
+      // Class only: the message of a failed cloud request can carry the file's URL.
+      System.out.println("ERRCLOUDSUBTITLE:"+e.getClass().getSimpleName());
     } finally
     {
       if (isoFile!=null)try

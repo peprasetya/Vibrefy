@@ -334,7 +334,7 @@ function formatTime(seconds)
 
 function saveProgress(timeSaved)
 {
- if (video.mediaFile)makeRequest('progress','time='+timeSaved+'&media='+encodeURIComponent(mediaFile));
+ if (video.mediaFile)makeRequest('progress','time='+timeSaved+'&media='+encodeURIComponent(video.mediaFile));
  if (checkWatch)
  {
   checkWatch=false;
@@ -380,6 +380,23 @@ function setFullWindow(on)
   if (!player)return;
   if (on)player.classList.add('fullwindow');
   else player.classList.remove('fullwindow');
+}
+
+// Caption size follows the picture, not the player bar. In the bottom window the bar is as
+// wide as the screen while the picture is a strip inside it, so a unit measured on the bar
+// makes each caption line a fifth of the picture tall. 5% of the picture height is what the
+// browser uses itself - which is why PiP already looked right - with a floor so the small
+// strip stays readable.
+function sizeCues()
+{
+  if (!video)return;
+  var boxWidth=video.clientWidth;
+  var boxHeight=video.clientHeight;
+  if (!boxWidth || !boxHeight)return;
+  var picture=boxHeight;
+  // object-fit:contain letterboxes the picture inside its box, so it can be shorter than it.
+  if (video.videoWidth && video.videoHeight)picture=Math.min(boxHeight,boxWidth*video.videoHeight/video.videoWidth);
+  video.style.setProperty('--cue-size',Math.max(10,Math.round(picture*0.05))+'px');
 }
 
 function selectSubtitle(index)
@@ -448,16 +465,19 @@ function buildSubtitleMenu()
 // entry so each carries its real name and language instead of a fixed label.
 function loadSubtitleTracks()
 {
-  if (!targetSubtitleList)
+  var playing=video.playing;
+  if (!playing || !playing.subtitleList)
   {
     buildSubtitleMenu();
     return;
   }
   var request=new XMLHttpRequest();
-  request.open('GET',encodePath(targetSubtitleList),true);
+  request.open('GET',encodePath(playing.subtitleList),true);
   request.onreadystatechange=function()
   {
     if (request.readyState!==4)return;
+    // A different file started while the list was in flight; its own call attaches its tracks.
+    if (video.playing!==playing)return;
     var tracks=[];
     if (request.status===200)try
     {
@@ -472,7 +492,7 @@ function loadSubtitleTracks()
       track.kind='subtitles';
       track.label=tracks[i].label;
       if (tracks[i].lang)track.srclang=tracks[i].lang;
-      track.src=encodePath(targetSubtitle)+'?track='+tracks[i].index;
+      track.src=encodePath(playing.subtitle)+'?track='+tracks[i].index;
       track.setAttribute('data-added-by','external');
       if (i===0)track.default=true;
       video.appendChild(track);
@@ -492,6 +512,10 @@ window.addEventListener("DOMContentLoaded",function()
  header=document.getElementById('header');
  panel=document.getElementById('panel');
  video=document.getElementById('video');
+ // Resizes cover every mode switch - bottom, full window, rotation. loadedmetadata covers a
+ // new episode with a different aspect ratio arriving in a box that did not change size.
+ if (window.ResizeObserver)new ResizeObserver(sizeCues).observe(video);
+ video.addEventListener('loadedmetadata',sizeCues);
  progressBar=document.getElementById('progressBar');
  progressBar.addEventListener('click',function(e)
  {
@@ -791,11 +815,14 @@ window.addEventListener("DOMContentLoaded",function()
  });
  video.addEventListener('canplay',function()
  {
-  if (targetTime>0)
+  // canplay fires again after every seek, so the resume point is read from the playing
+  // copy and spent once - never from targetTime, which a cover opened since may have set.
+  if (video.playing && video.playing.time>0)
   {
-   video.currentTime=targetTime;
-   targetTime=0;
-   video.play().catch(error => {console.log('Autoplay was prevented:', error);});
+   video.currentTime=video.playing.time;
+   video.playing.time=0;
+   // Autoplay can be refused; the user then presses play, so there is nothing to report.
+   video.play().catch(function(){});
   }
   checkWatch=true;
   totalDurationEl.textContent=formatTime(video.duration);
@@ -811,7 +838,7 @@ window.addEventListener("DOMContentLoaded",function()
  video.addEventListener('ended',function()
  {
   saveProgress(-99);
-  var finished=mediaFile;
+  var finished=video.mediaFile;
   video.mediaFile=false;
   if (!autoPlayNext(finished))video.removeAttribute('src');
   if(document.getElementById("homepartwatch"))setTimeout(function(){loadWatching();},1000);
@@ -883,15 +910,14 @@ function pickNextEpisode(current,names)
 // is ever saved for it.
 function startNextEpisode(finished,currentUrl,nextUrl)
 {
+ var playing=video.playing;
  var slash=String(finished).indexOf('/');
- if (slash<0 || !targetMedia || targetMedia.length<=currentUrl.length)return false;
- targetMedia=targetMedia.substring(0,targetMedia.length-currentUrl.length)+nextUrl;
- if (targetSubtitle)targetSubtitle=targetSubtitle.substring(0,targetSubtitle.length-currentUrl.length)+nextUrl;
- if (targetSubtitleList)targetSubtitleList=targetSubtitleList.substring(0,targetSubtitleList.length-currentUrl.length)+nextUrl;
- mediaFile=String(finished).substring(0,slash+1)+nextUrl;
- targetTime=0;
- playTarget();
- video.play().catch(function(error){console.log('Autoplay was prevented:',error);});
+ if (slash<0 || !playing || !playing.media || playing.media.length<=currentUrl.length)return false;
+ var swap=function(url){return url?url.substring(0,url.length-currentUrl.length)+nextUrl:url;};
+ // Handed straight to playTarget, leaving the target* globals alone: they belong to the
+ // cover dialog, which may be open on a different file right now.
+ playTarget({media:swap(playing.media),subtitle:swap(playing.subtitle),subtitleList:swap(playing.subtitleList),file:String(finished).substring(0,slash+1)+nextUrl,time:0});
+ video.play().catch(function(){});
  return true;
 }
 
@@ -901,7 +927,8 @@ function startNextEpisode(finished,currentUrl,nextUrl)
 // when a next episode is playing or being fetched; the fetch path cleans up itself.
 function autoPlayNext(finished)
 {
- if (!finished || !targetMedia)return false;
+ var playing=video.playing;
+ if (!finished || !playing || !playing.media)return false;
  var slash=String(finished).indexOf('/');
  if (slash<0)return false;
  var currentUrl=String(finished).substring(slash+1);
@@ -925,15 +952,15 @@ function autoPlayNext(finished)
  var next=pickNextEpisode(current,names);
  if (next)return startNextEpisode(finished,currentUrl,dir+next);
  // No listing on this page (Home): ask the server which files sit beside this one.
- if (targetMedia.indexOf('/stream/')!==0)return false;
- var listUrl='/medialist/'+targetMedia.substring('/stream/'.length);
+ if (playing.media.indexOf('/stream/')!==0)return false;
+ var listUrl='/medialist/'+playing.media.substring('/stream/'.length);
  var request=new XMLHttpRequest();
  request.open('GET',encodePath(listUrl),true);
  request.onreadystatechange=function()
  {
   if (request.readyState!==4)return;
   // Stale by now if something else started playing in the meantime.
-  if (video.mediaFile || mediaFile!==finished)return;
+  if (video.mediaFile || video.playing!==playing)return;
   var served=[];
   if (request.status===200)try
   {
@@ -949,16 +976,23 @@ function autoPlayNext(finished)
  return true;
 }
 
-function playTarget() {
-  if (!video || !targetMedia) return;
-
-  if (mediaFile) video.mediaFile = mediaFile;
+// The cover dialog writes the target* globals, and a cover can be opened and closed while
+// something else plays on. So playback takes its own copy here, and everything that runs
+// while it plays - progress, resume point, subtitles, next episode - reads video.playing,
+// never the globals. The dialog button passes nothing; the next episode passes its target.
+function playTarget(next)
+{
+  if (!video)return;
+  var target=next || {media:targetMedia,subtitle:targetSubtitle,subtitleList:targetSubtitleList,file:mediaFile,time:targetTime};
+  if (!target.media)return;
+  video.playing=target;
+  if (target.file) video.mediaFile = target.file;
 
   // Remove previously added external tracks
   var oldTracks = video.querySelectorAll('track[data-added-by="external"]');
   for (var i = 0; i < oldTracks.length; i++) video.removeChild(oldTracks[i]);
 
-  video.src = encodePath(targetMedia);
+  video.src = encodePath(target.media);
 
   function hasNativeSubtitles() {
     var tracks = video.textTracks;

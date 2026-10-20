@@ -78,7 +78,6 @@ function submitForm(event)
 }
 function openLibrary(event)
 {
-  console.log(event.currentTarget.textContent);
  makeRequest('library','name='+encodeURIComponent(event.currentTarget.textContent),false);
 }
 </script>

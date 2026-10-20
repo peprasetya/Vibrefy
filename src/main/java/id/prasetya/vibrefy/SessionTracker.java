@@ -52,7 +52,6 @@ public class SessionTracker implements HttpSessionListener,HttpSessionIdListener
   {
     HttpSession session=event.getSession();
     sessionMap.put(session.getId(),session);
-    System.out.println("Session Created: "+session.getId());
   }
 
   @Override
@@ -81,11 +80,7 @@ public class SessionTracker implements HttpSessionListener,HttpSessionIdListener
   public static void sessionCheck(HttpSession session)
   {
     String sessionId=session.getId();
-    if (!sessionMap.containsKey(sessionId))
-    {
-      sessionMap.put(sessionId,session);
-      System.out.println("Session Tracked: "+sessionId);
-    }
+    if (!sessionMap.containsKey(sessionId))sessionMap.put(sessionId,session);
     String issSubId=(String)session.getAttribute(Portal.SessionAccountID);
     if (issSubId==null)return;
     issSubIdSessions.merge(issSubId,1,Integer::sum);
@@ -149,14 +144,6 @@ public class SessionTracker implements HttpSessionListener,HttpSessionIdListener
   }
 
 
-  public static void listSessions()
-  {
-    System.out.println("Active Sessions:");
-    sessionMap.forEach((id,session)->System.out.println("Session ID: "+id+", Created: "+session.getCreationTime()));
-    System.out.println("User Cache:");
-    jsonMap.forEach((issSubId,data)->System.out.println("User: "+issSubId+" (Sessions: "+issSubIdSessions.getOrDefault(issSubId,0)+"), Data Size: "+data.length()+" keys."));
-  }
-
   public static int getActiveSessionCount()
   {
     return sessionMap.size();
@@ -165,6 +152,8 @@ public class SessionTracker implements HttpSessionListener,HttpSessionIdListener
   @Override
   public void contextInitialized(ServletContextEvent sce)
   {
+    // Subtitle text used to be cached in a directory on disk. Nothing writes there now.
+    id.prasetya.vibrefy.tools.cloud.CloudCache.purgeLegacy();
     Portal.reloadProperty();
     JSONObject encryption=Portal.getProperty(PropEncryption);
     if (encryption == null)encryption = new JSONObject();
@@ -368,7 +357,6 @@ public class SessionTracker implements HttpSessionListener,HttpSessionIdListener
        System.out.println("Exception on loading user data.");
        e.printStackTrace(System.out);
      }
-     System.out.println("No data found for user "+issSubId);
      return new JSONObject();
    }
 

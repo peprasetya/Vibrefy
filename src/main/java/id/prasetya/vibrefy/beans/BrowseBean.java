@@ -186,7 +186,7 @@ public class BrowseBean extends BeanObject implements Comparator<Object>
             {
             } catch(IOException e)
             {
-              System.out.println("ERRCOVERIO:"+e.getMessage());
+              // An unreadable or cover-less file is routine, and the message names the file.
             } catch(Exception e)
             {
               System.out.println("ERRCOVERCMN:"+e.getMessage());
@@ -232,7 +232,7 @@ public class BrowseBean extends BeanObject implements Comparator<Object>
             {
             } catch(IOException e)
             {
-              System.out.println("ERRCOVERIO:"+e.getMessage());
+              // An unreadable or cover-less file is routine, and the message names the file.
             } catch(Exception e)
             {
               System.out.println("ERRCOVERCMN:"+e.getMessage());
@@ -416,7 +416,6 @@ public class BrowseBean extends BeanObject implements Comparator<Object>
   private void loadCloudCover(CloudProvider provider,String itemId,boolean thumbnail) throws IOException
   {
     contentType="image/jpeg";
-    String tag="COVER["+path.getCloudLabel()+"/"+path.getCloudPath()+"]";
     byte[] sidecar=findCloudSidecar(provider);
     if (sidecar!=null)
     {
@@ -427,37 +426,24 @@ public class BrowseBean extends BeanObject implements Comparator<Object>
     }
 
     CloudItem item=provider.getItem(itemId);
-    if (item==null)
-    {
-      System.out.println(tag+" no metadata (getItem null) - cannot read embedded cover");
-      return;
-    }
-    if (item.getSize()<=0)
-    {
-      System.out.println(tag+" size unknown ("+item.getSize()+") - cannot read embedded cover");
-      return;
-    }
+    if (item==null)return;
+    if (item.getSize()<=0)return;
     RemoteSource source=new RemoteSource(provider,itemId,item.getSize());
     IsoFile ifile=null;
     try
     {
       ifile=source.openIso();
       AppleCoverBox covrbox=findCoverBox(ifile);
-      if (covrbox==null)
-      {
-        System.out.println(tag+" file has no embedded cover art");
-        return;
-      }
+      if (covrbox==null)return;
       cover=new ByteArrayInputStream(covrbox.getCoverData());
       if (thumbnail)cover=scaleThumb(cover);
       else if (covrbox.getDataType()==14)contentType="image/png";
     } catch (IndexOutOfBoundsException e)
     {
-      System.out.println(tag+" no embedded cover box");
+      // No embedded cover box - the tile falls back to its placeholder.
     } catch (Exception e)
     {
       // For FileLu this is normally the premium-only download link being refused.
-      System.out.println(tag+" embedded cover read failed: "+e.getMessage());
     } finally
     {
       if (ifile!=null)try
@@ -523,10 +509,9 @@ public class BrowseBean extends BeanObject implements Comparator<Object>
           sidecarType=".png".equals(extension)?"image/png":"image/jpeg";
           return data;
         }
-        System.out.println("SIDECAR["+stem+extension+"] range read returned nothing ("+HttpTool.getLastStatus()+")");
       } catch (IOException e)
       {
-        System.out.println("SIDECAR["+stem+extension+"] link failed: "+e.getMessage());
+        // No usable sidecar; the embedded cover is tried next.
       }
     }
     return null;

@@ -1,91 +1,104 @@
 package id.prasetya.vibrefy.tools.cloud;
 
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.security.MessageDigest;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
- * Small on-disk cache for artefacts that are expensive to derive from a remote file.
+ * Small in-memory cache for artefacts that are expensive to derive from a remote file.
  *
  * Subtitle extraction is the reason this exists. Subtitle samples are interleaved
  * across the whole MP4, so pulling them from a cloud file costs roughly one HTTP
  * request per cue - measured at ~300 requests for 300 cues. That is tolerable once
- * and intolerable on every playback, so the finished WEBVTT is kept here.
+ * and intolerable on every playback, so the finished WEBVTT is kept for a while.
+ *
+ * Memory only, by design: nothing about what a user played is ever written to disk,
+ * and a restart forgets all of it. Entries belong to one user and are never served to
+ * another, even for the same mount label and path - two people can both have a mount
+ * called "Drive" holding different files at the same path.
  */
 public class CloudCache
 {
-  private static final String CACHE_DIR="vibecache";
-  private static final long MAX_AGE=30L*24L*60L*60L*1000L; // 30 days
+  // Long enough to cover a film and a rewatch; short enough that nothing lingers.
+  private static final long MAX_AGE=2L*60L*60L*1000L;
+  private static final int MAX_ENTRIES=100;
+  // One feature-length subtitle track is tens of kilobytes. This only stops a freak file.
+  private static final int MAX_CHARS=2*1024*1024;
+  // The directory an earlier version wrote to, relative to the server's working directory.
+  private static final String LEGACY_DIR="vibecache";
 
-  private static File directory()
+  private static class Held
   {
-    File dir=new File(CACHE_DIR);
-    if (!dir.exists())dir.mkdirs();
-    return dir;
+    final String content;
+    final long created=System.currentTimeMillis();
+    Held(String content){this.content=content;}
   }
 
-  /** Hashed so a cache filename never leaks a path or an account id. */
-  private static String keyFor(String kind,String identity)
-  {
-    try
-    {
-      MessageDigest digest=MessageDigest.getInstance("SHA-256");
-      byte[] hash=digest.digest((kind+"|"+identity).getBytes(StandardCharsets.UTF_8));
-      StringBuilder text=new StringBuilder(hash.length*2);
-      for (byte b:hash)
+  private static final Map<String,Held> entries=java.util.Collections.synchronizedMap(
+      new LinkedHashMap<String,Held>(32,0.75f,true)
       {
-        String hex=Integer.toHexString(b & 0xFF);
-        if (hex.length()==1)text.append('0');
-        text.append(hex);
-      }
-      return text.toString();
-    } catch (Exception e)
-    {
-      return null;
-    }
+        private static final long serialVersionUID=1L;
+        protected boolean removeEldestEntry(Map.Entry<String,Held> eldest)
+        {
+          return size()>MAX_ENTRIES;
+        }
+      });
+
+  private static String keyFor(String user,String kind,String identity)
+  {
+    if (user==null || kind==null || identity==null)return null;
+    return user+"|"+kind+"|"+identity;
   }
 
-  public static String read(String kind,String identity)
+  /** The cached content for this user, or null when absent or expired. */
+  public static String read(String user,String kind,String identity)
   {
-    String key=keyFor(kind,identity);
+    String key=keyFor(user,kind,identity);
     if (key==null)return null;
-    File file=new File(directory(),key);
-    if (!file.exists() || !file.isFile())return null;
-    if (System.currentTimeMillis()-file.lastModified()>MAX_AGE)
+    Held entry=entries.get(key);
+    if (entry==null)return null;
+    if (System.currentTimeMillis()-entry.created>MAX_AGE)
     {
-      file.delete();
+      entries.remove(key);
       return null;
     }
-    try
+    return entry.content;
+  }
+
+  public static void write(String user,String kind,String identity,String content)
+  {
+    String key=keyFor(user,kind,identity);
+    if (key==null || content==null || content.length()>MAX_CHARS)return;
+    entries.put(key,new Held(content));
+  }
+
+  /** Forgets everything held for one user: a mount was re-linked, or their last session ended. */
+  public static void forgetUser(String user)
+  {
+    if (user==null)return;
+    String prefix=user+"|";
+    synchronized (entries)
     {
-      return new String(Files.readAllBytes(file.toPath()),StandardCharsets.UTF_8);
-    } catch (IOException e)
-    {
-      return null;
+      entries.keySet().removeIf(key -> key.startsWith(prefix));
     }
   }
 
-  public static void write(String kind,String identity,String content)
+  public static void clear()
   {
-    String key=keyFor(kind,identity);
-    if (key==null || content==null)return;
-    File target=new File(directory(),key);
-    // Write to a sibling and rename, so a crash mid-write cannot leave a half file
-    // that would later be served as if it were complete.
-    File temp=new File(directory(),key+".tmp");
-    try
-    {
-      try (FileOutputStream out=new FileOutputStream(temp))
-      {
-        out.write(content.getBytes(StandardCharsets.UTF_8));
-      }
-      Files.move(temp.toPath(),target.toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-    } catch (IOException e)
-    {
-      temp.delete();
-    }
+    entries.clear();
+  }
+
+  /**
+   * Deletes what an earlier version left on disk. Run at startup, so the old subtitle
+   * text goes away on the next restart wherever the server runs, without anyone having
+   * to find the directory. Only touches regular files directly inside it.
+   */
+  public static void purgeLegacy()
+  {
+    File dir=new File(LEGACY_DIR);
+    if (!dir.isDirectory())return;
+    File[] files=dir.listFiles();
+    if (files!=null)for (File file:files)if (file.isFile())file.delete();
+    dir.delete();
   }
 }

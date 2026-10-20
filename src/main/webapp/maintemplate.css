@@ -740,7 +740,9 @@ container-type: inline-size;
   border-radius: 3px;
   border: none;
   text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
-  font-size: clamp(6px, 2.5cqw, 32px);
+  /* Set by sizeCues() in scriptlib.js from the rendered picture height, not the player
+     bar: the bar spans the window while the picture is a small strip inside it. */
+  font-size: var(--cue-size, 16px);
 }
 .player-controls
 {

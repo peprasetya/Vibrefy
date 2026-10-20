@@ -6,7 +6,15 @@ if (link!=null)
   // browser never contacts the storage provider directly.
   try
   {
-    HttpTool.pipeRange(link.getURL(),link.getHeaders(),bean.getStart(),bean.getContentLength(),response.getOutputStream());
+    long sent=HttpTool.pipeRange(link.getURL(),link.getHeaders(),bean.getStart(),bean.getContentLength(),response.getOutputStream());
+    // Nothing sent means the provider refused the request outright, and the response is not
+    // committed yet. If the link came from the cache it may simply have gone stale, so get
+    // a fresh one and try once more; a link that was already fresh is not retried.
+    if (sent<0 && bean.refreshCloudLink())
+    {
+      link=bean.getCloudLink();
+      HttpTool.pipeRange(link.getURL(),link.getHeaders(),bean.getStart(),bean.getContentLength(),response.getOutputStream());
+    }
     response.getOutputStream().flush();
   } catch (IOException ioe)
   {

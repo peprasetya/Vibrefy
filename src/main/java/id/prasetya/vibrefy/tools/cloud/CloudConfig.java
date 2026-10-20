@@ -12,6 +12,7 @@ import id.prasetya.vibrefy.Portal;
 import id.prasetya.vibrefy.SessionTracker;
 import id.prasetya.vibrefy.beans.AuthOpenIDBean;
 import id.prasetya.vibrefy.data.CloudItem;
+import id.prasetya.vibrefy.data.CloudLink;
 import jakarta.servlet.http.HttpSession;
 
 /**
@@ -51,6 +52,102 @@ public class CloudConfig
           return size()>MAX_CACHE;
         }
       });
+
+  /**
+   * A streamable file as the proxy needs it: its size, for Content-Length and Content-Range,
+   * and the link its bytes are fetched from. Both cost a provider round trip to learn, and a
+   * player asks for a fresh range on every seek and buffer refill, so they are held briefly
+   * instead of being asked for again on each one.
+   */
+  public static class Stream
+  {
+    private final long size;
+    private final CloudLink link;
+    private final long expire;
+    private final boolean cached;
+
+    private Stream(long size,CloudLink link,long expire,boolean cached)
+    {
+      this.size=size;
+      this.link=link;
+      this.expire=expire;
+      this.cached=cached;
+    }
+
+    public long getSize(){return size;}
+    public CloudLink getLink(){return link;}
+    /** True when this came out of the cache rather than from the provider just now. */
+    public boolean isCached(){return cached;}
+    private boolean isLive(){return System.currentTimeMillis()<expire;}
+    private Stream asCached(){return new Stream(size,link,expire,true);}
+  }
+
+  // The most any entry is held, whatever the link claims. Links that expire sooner win.
+  private static final long STREAM_LIFETIME=55L*60L*1000L;
+  // Dropped this long before the link or bearer behind it expires, so an entry is never
+  // handed out in its last moments and then fail halfway through the first chunk. It is
+  // longer than CloudToken's own refresh skew, so a bearer is always renewed before this
+  // cache would have served it.
+  private static final long STREAM_MARGIN=2L*60L*1000L;
+  private static final int MAX_STREAMS=500;
+
+  // issSubId|label|itemId -> size and download link. In memory only, and keyed by user so
+  // two people playing the same file each get their own entry, made with their own account.
+  private static final Map<String,Stream> streamCache=java.util.Collections.synchronizedMap(
+      new LinkedHashMap<String,Stream>(64,0.75f,true)
+      {
+        private static final long serialVersionUID=1L;
+        protected boolean removeEldestEntry(Map.Entry<String,Stream> eldest)
+        {
+          return size()>MAX_STREAMS;
+        }
+      });
+
+  private static String streamKey(HttpSession session,CloudProvider provider,String itemId)
+  {
+    String user=getUserId(session);
+    if (user==null || itemId==null)return null;
+    return user+"|"+provider.getLabel()+"|"+itemId;
+  }
+
+  /**
+   * The size and download link for a cloud file, from the cache while it is still safely
+   * valid and from the provider otherwise. Null when the item cannot be streamed. A caller
+   * with no signed-in user is never cached, so an entry can never be shared across people.
+   */
+  public static Stream openStream(HttpSession session,CloudProvider provider,String itemId) throws IOException
+  {
+    String key=streamKey(session,provider,itemId);
+    if (key!=null)
+    {
+      Stream hit=streamCache.get(key);
+      if (hit!=null)
+      {
+        if (hit.isLive())return hit.asCached();
+        streamCache.remove(key);
+      }
+    }
+    CloudItem item=provider.getItem(itemId);
+    if (item==null || item.isFolder() || item.getSize()<=0)return null;
+    CloudLink link=provider.getDownloadLink(itemId);
+    long now=System.currentTimeMillis();
+    long expire=now+STREAM_LIFETIME;
+    // An expire of 0 means the link itself never goes stale (see CloudLink); anything else,
+    // such as a Drive bearer or a tokenised CDN URL, caps how long this entry may live.
+    if (link.getExpire()>0)expire=Math.min(expire,link.getExpire());
+    expire-=STREAM_MARGIN;
+    Stream fresh=new Stream(item.getSize(),link,expire,false);
+    // Already inside the margin (a link that lives under two minutes): serve it, don't keep it.
+    if (key!=null && expire>now)streamCache.put(key,fresh);
+    return fresh;
+  }
+
+  /** Drops one file's entry, after the provider refused the link that was cached for it. */
+  public static void forgetStream(HttpSession session,CloudProvider provider,String itemId)
+  {
+    String key=streamKey(session,provider,itemId);
+    if (key!=null)streamCache.remove(key);
+  }
 
   // Providers are cached so one account keeps a single CloudToken, which keeps its
   // synchronized refresh meaningful across concurrent requests. The token rides along
@@ -124,6 +221,11 @@ public class CloudConfig
     {
       idCache.keySet().removeIf(key -> key.startsWith(prefix));
     }
+    synchronized (streamCache)
+    {
+      streamCache.keySet().removeIf(key -> key.startsWith(prefix));
+    }
+    CloudCache.forgetUser(user);
   }
 
   public static CloudProvider getProvider(HttpSession session,String label)
@@ -219,6 +321,11 @@ public class CloudConfig
     {
       idCache.keySet().removeIf(key -> key.startsWith(prefix));
     }
+    synchronized (streamCache)
+    {
+      streamCache.keySet().removeIf(key -> key.startsWith(prefix));
+    }
+    CloudCache.forgetUser(userId);
   }
 
   /** Undeploy cleanup, so no cached provider or resolver entry survives a redeploy. */
@@ -229,6 +336,8 @@ public class CloudConfig
     {
       idCache.clear();
     }
+    streamCache.clear();
+    CloudCache.clear();
   }
 
   public static JSONObject findAuth(char kind)

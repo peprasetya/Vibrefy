@@ -1,4 +1,4 @@
-<%@page import="id.prasetya.vibrefy.tools.Escape,id.prasetya.vibrefy.beans.SetupBean,id.prasetya.vibrefy.beans.PairBean"%><jsp:useBean id="bean" scope="request" class="id.prasetya.vibrefy.beans.BeanObject" /><?xml version="1.0" ?>
+<%@page import="id.prasetya.vibrefy.tools.Escape,id.prasetya.vibrefy.beans.SetupBean,id.prasetya.vibrefy.beans.PairBean" pageEncoding="UTF-8"%><jsp:useBean id="bean" scope="request" class="id.prasetya.vibrefy.beans.BeanObject" /><?xml version="1.0" ?>
 <%boolean needSetup=SetupBean.isUnconfigured();%>
 <ajax>
 <replacehtml id="menu"></replacehtml>
